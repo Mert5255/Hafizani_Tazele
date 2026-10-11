@@ -41,13 +41,15 @@
       border: 3px solid #334155; border-radius: 12px; padding: 15px;
       display: flex; flex-direction: column;
     }
-    .leaderboard-title { font-size: 18px; font-weight: bold; color: #facc15; text-align: center; margin-bottom: 10px; }
+    .leaderboard-title { font-size: 18px; font-weight: bold; color: #facc15; text-align: center; margin-bottom: 4px; }
+    .leaderboard-status { font-size: 12px; color: #94a3b8; text-align: center; min-height: 16px; margin-bottom: 6px; }
     .leaderboard-list { flex: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
     .leaderboard-item {
       display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px;
       border-bottom: 1px solid #334155; font-size: 14px;
     }
     .leaderboard-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .leaderboard-item span:last-child { white-space: nowrap; }
     .leaderboard-item.me { background: rgba(56, 189, 248, 0.2); font-weight: bold; border-radius: 4px; }
 
     .ball {
@@ -63,13 +65,11 @@
     .ball.bonus { background: radial-gradient(circle at 30% 30%, #facc15, #ca8a04); }
     @media (hover: hover) { .ball:hover { filter: brightness(1.12); } }
 
-    /* Overlay (oyun alanı içinde) */
     #overlay {
       position: absolute; inset: 0;
       background: rgba(15, 23, 42, 0.92); display: flex; flex-direction: column;
       justify-content: center; align-items: center; z-index: 10; padding: 16px; text-align: center;
     }
-    /* Giriş modalı (tüm ekranı kaplar) */
     #auth-modal {
       position: fixed; inset: 0;
       background: rgba(15, 23, 42, 0.97); display: flex; flex-direction: column;
@@ -81,8 +81,7 @@
 
     input {
       width: 100%; max-width: 320px; padding: 12px; margin: 8px 0; border-radius: 6px;
-      border: 1px solid #475569; background: #0f172a; color: #fff;
-      font-size: 16px; /* iOS'ta yakınlaştırmayı önler */
+      border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 16px;
     }
     button {
       padding: 12px 28px; font-size: 16px; font-weight: bold; color: #fff;
@@ -91,19 +90,18 @@
       margin-top: 5px; touch-action: manipulation; min-height: 44px;
     }
     button:active { background: #1d4ed8; transform: translateY(1px); }
+    button:disabled { opacity: 0.6; cursor: wait; }
     .auth-toggle { font-size: 14px; color: #38bdf8; cursor: pointer; margin-top: 14px; text-decoration: underline; padding: 6px; }
+    .auth-hint { font-size: 12px; color: #94a3b8; max-width: 320px; margin-top: 2px; }
 
-    /* Tablet ve telefon: sıralama tablosu oyunun altına geçer */
     @media (max-width: 900px) {
       .container { flex-direction: column; align-items: center; gap: 12px; }
       #game-area { flex: none; }
-      .leaderboard-panel { width: 100%; max-width: 600px; flex: none; height: 220px; padding: 12px; }
+      .leaderboard-panel { width: 100%; max-width: 600px; flex: none; height: 260px; padding: 12px; }
     }
-    /* Dikey telefon: oyun alanı daha dik olsun */
     @media (max-width: 600px) and (orientation: portrait) {
       #game-area { aspect-ratio: 4 / 5; border-width: 2px; }
     }
-    /* Yatay telefon: alçak ekranda her şey sığsın */
     @media (max-height: 480px) and (orientation: landscape) {
       header { margin-top: 0; }
       h1 { display: none; }
@@ -117,9 +115,10 @@
   <!-- Giriş / Kayıt Modalı -->
   <div id="auth-modal">
     <h2 id="auth-title" style="color: #38bdf8; margin: 0 0 10px;">Giriş Yap</h2>
-    <input type="text" id="auth-username" placeholder="Kullanıcı Adı" autocomplete="username" autocapitalize="none">
+    <input type="text" id="auth-username" placeholder="Kullanıcı Adı" autocomplete="username" autocapitalize="none" maxlength="16">
     <input type="password" id="auth-password" placeholder="Şifre" autocomplete="current-password">
-    <div id="auth-error" style="color: #f87171; font-size: 13px; min-height: 18px; margin-top: 4px;"></div>
+    <div class="auth-hint" id="auth-hint">Kullanıcı adı: 3-16 karakter, harf/rakam/_ (Türkçe karakter yok). Şifre en az 6 karakter.</div>
+    <div id="auth-error" style="color: #f87171; font-size: 13px; min-height: 18px; margin-top: 6px;"></div>
     <button id="auth-btn" onclick="handleAuth()">Giriş Yap</button>
     <div class="auth-toggle" id="auth-toggle-btn" onclick="toggleAuthMode()">Hesabın yok mu? Kayıt Ol</div>
   </div>
@@ -147,11 +146,23 @@
 
     <div class="leaderboard-panel">
       <div class="leaderboard-title">🏆 Sıralama Tablosu</div>
+      <div class="leaderboard-status" id="leaderboard-status"></div>
       <ul class="leaderboard-list" id="leaderboard-list"></ul>
     </div>
   </div>
 
   <script>
+    // =====================================================
+    //  FIREBASE AYARLARI — kendi değerlerinle değiştir
+    // =====================================================
+    const FIREBASE_API_KEY = "AIzaSyCVbDURPWomNMDBsYtyRWvHph5DvOQRrzQ";
+    const DB_URL = "https://hafizanitazele-48921-default-rtdb.europe-west1.firebasedatabase.app";
+    // =====================================================
+
+    const AUTH_BASE = "https://identitytoolkit.googleapis.com/v1/accounts";
+    const EMAIL_DOMAIN = "@hafiza-oyunu.app";
+    const LEADERBOARD_REFRESH_MS = 15000;
+
     const gameArea = document.getElementById('game-area');
     const overlay = document.getElementById('overlay');
     const overlayTitle = document.getElementById('overlay-title');
@@ -164,8 +175,10 @@
     const timeDisplay = document.getElementById('time-display');
     const countDisplay = document.getElementById('count-display');
 
-    let currentUser = null;
+    let session = null;      // { key, name, email, password, uid, idToken }
+    let myBest = 0;
     let isRegisterMode = false;
+    let leaderboardTimer = null;
 
     let currentLevel = 1;
     let currentScore = 0;
@@ -177,7 +190,6 @@
     let animationFrameId = null;
     let isGameActive = false;
 
-    // Ekran boyutuna göre ölçekleme
     let areaW = 0, areaH = 0, ballSize = 50, speedScale = 1;
 
     const successMessages = [
@@ -186,8 +198,8 @@
       "Hafızana şapka çıkartılır!", "Gittikçe ustalaşıyorsun!"
     ];
 
+    // ---------- Ölçekleme ----------
     function measureArea() {
-      // clientWidth/Height kenarlık hariç iç alanı verir
       areaW = gameArea.clientWidth;
       areaH = gameArea.clientHeight;
       ballSize = Math.round(Math.max(34, Math.min(50, areaW * 0.085)));
@@ -203,7 +215,6 @@
       el.style.top = b.y + 'px';
     }
 
-    // Ekran döndürülünce / boyut değişince topları orantılı olarak yeniden konumlandır
     function handleResize() {
       const oldW = areaW, oldH = areaH;
       measureArea();
@@ -218,13 +229,61 @@
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
 
-    function getUsers() {
-      return JSON.parse(localStorage.getItem('memory_game_users') || '{}');
-    }
-    function saveUsers(users) {
-      localStorage.setItem('memory_game_users', JSON.stringify(users));
+    // ---------- Firebase yardımcıları ----------
+    function isConfigured() {
+      return !FIREBASE_API_KEY.includes("BURAYA") && !DB_URL.includes("BURAYA");
     }
 
+    async function authRequest(endpoint, email, password) {
+      const res = await fetch(`${AUTH_BASE}:${endpoint}?key=${FIREBASE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, returnSecureToken: true })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const err = new Error((data.error && data.error.message) || 'HATA');
+        throw err;
+      }
+      return data; // idToken, localId, ...
+    }
+
+    async function refreshToken() {
+      const data = await authRequest('signInWithPassword', session.email, session.password);
+      session.idToken = data.idToken;
+      session.uid = data.localId;
+    }
+
+    // method: GET/PUT, path: "scores" veya "scores/ali", needAuth: yazma için true
+    async function dbRequest(method, path, body, needAuth, canRetry = true) {
+      let url = `${DB_URL}/${path}.json`;
+      if (needAuth && session) url += `?auth=${encodeURIComponent(session.idToken)}`;
+      const opts = { method };
+      if (body !== undefined) {
+        opts.headers = { 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      if ((res.status === 401 || res.status === 403) && needAuth && session && canRetry) {
+        await refreshToken();
+        return dbRequest(method, path, body, needAuth, false);
+      }
+      if (!res.ok) throw new Error('DB_' + res.status);
+      return res.json();
+    }
+
+    function authErrorText(msg) {
+      if (msg.startsWith('EMAIL_EXISTS')) return "Bu kullanıcı adı zaten alınmış!";
+      if (msg.startsWith('WEAK_PASSWORD')) return "Şifre en az 6 karakter olmalı.";
+      if (msg.startsWith('TOO_MANY_ATTEMPTS')) return "Çok fazla deneme. Biraz bekleyip tekrar dene.";
+      if (['INVALID_LOGIN_CREDENTIALS', 'EMAIL_NOT_FOUND', 'INVALID_PASSWORD'].some(c => msg.startsWith(c)))
+        return "Hatalı kullanıcı adı veya şifre!";
+      if (msg.startsWith('OPERATION_NOT_ALLOWED')) return "Firebase'de Email/Şifre girişi açık değil.";
+      if (msg === 'Failed to fetch') return "Bağlantı hatası. İnternetini kontrol et.";
+      return "Bir hata oluştu: " + msg;
+    }
+
+    // ---------- Giriş / Kayıt ----------
     function toggleAuthMode() {
       isRegisterMode = !isRegisterMode;
       document.getElementById('auth-title').innerText = isRegisterMode ? "Kayıt Ol" : "Giriş Yap";
@@ -233,38 +292,49 @@
       document.getElementById('auth-error').innerText = "";
     }
 
-    function handleAuth() {
+    async function handleAuth() {
       const u = document.getElementById('auth-username').value.trim();
-      const p = document.getElementById('auth-password').value.trim();
+      const p = document.getElementById('auth-password').value;
       const errorDiv = document.getElementById('auth-error');
+      const btn = document.getElementById('auth-btn');
 
-      if (!u || !p) {
-        errorDiv.innerText = "Lütfen kullanıcı adı ve şifre girin.";
+      if (!isConfigured()) {
+        errorDiv.innerText = "Firebase ayarları henüz girilmemiş (dosyanın başındaki FIREBASE_API_KEY ve DB_URL).";
         return;
       }
+      if (!u || !p) { errorDiv.innerText = "Lütfen kullanıcı adı ve şifre girin."; return; }
+      if (!/^[A-Za-z0-9_]{3,16}$/.test(u)) {
+        errorDiv.innerText = "Kullanıcı adı 3-16 karakter olmalı; sadece harf, rakam ve _ (Türkçe karakter yok).";
+        return;
+      }
+      if (p.length < 6) { errorDiv.innerText = "Şifre en az 6 karakter olmalı."; return; }
 
-      const users = getUsers();
+      const key = u.toLowerCase();
+      const email = key + EMAIL_DOMAIN;
 
-      if (isRegisterMode) {
-        if (users[u]) {
-          errorDiv.innerText = "Bu kullanıcı adı zaten alınmış!";
-          return;
+      btn.disabled = true;
+      errorDiv.innerText = "";
+      try {
+        const data = await authRequest(isRegisterMode ? 'signUp' : 'signInWithPassword', email, p);
+        session = { key, name: u, email, password: p, uid: data.localId, idToken: data.idToken };
+
+        // Skor kaydını getir; yoksa oluştur
+        let entry = await dbRequest('GET', `scores/${key}`);
+        if (!entry) {
+          entry = { name: u, highScore: 0, uid: session.uid };
+          await dbRequest('PUT', `scores/${key}`, entry, true);
         }
-        users[u] = { password: p, highScore: 0 };
-        saveUsers(users);
-        currentUser = u;
+        myBest = Number(entry.highScore) || 0;
+        session.name = entry.name || u;
         initGameSession();
-      } else {
-        if (!users[u] || users[u].password !== p) {
-          errorDiv.innerText = "Hatalı kullanıcı adı veya şifre!";
-          return;
-        }
-        currentUser = u;
-        initGameSession();
+      } catch (e) {
+        session = null;
+        errorDiv.innerText = authErrorText(e.message || 'HATA');
+      } finally {
+        btn.disabled = false;
       }
     }
 
-    // Enter tuşu ile giriş
     ['auth-username', 'auth-password'].forEach(id => {
       document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter') handleAuth();
@@ -272,7 +342,10 @@
     });
 
     function logout() {
-      currentUser = null;
+      session = null;
+      myBest = 0;
+      stopLeaderboardPolling();
+      document.getElementById('auth-password').value = '';
       document.getElementById('auth-modal').style.display = 'flex';
       overlay.style.display = 'none';
       clearGameArea();
@@ -280,58 +353,85 @@
 
     function initGameSession() {
       document.getElementById('auth-modal').style.display = 'none';
-      document.getElementById('current-user-name').innerText = currentUser;
+      document.getElementById('current-user-name').textContent = session.name;
       currentLevel = 1;
       currentScore = 0;
       scoreDisplay.innerText = currentScore;
       levelDisplay.innerText = currentLevel;
-      updateLeaderboard();
       measureArea();
+      startLeaderboardPolling();
 
       overlayTitle.innerText = "HOŞ GELDİN!";
       overlayTitle.style.color = "#38bdf8";
-      overlayMsg.innerText = "Hazır olduğunda oyuna başla!";
+      overlayMsg.innerText = myBest > 0 ? `Rekorun: ${myBest} puan. Hazır olduğunda başla!` : "Hazır olduğunda oyuna başla!";
       scoreInfo.innerText = "";
       startBtn.innerText = "Oyuna Başla";
       overlay.style.display = 'flex';
     }
 
+    // ---------- Skor ve sıralama ----------
+    // Senkron döner (yeni rekor mu?), kaydı arka planda yapar
     function updateHighScore(score) {
-      const users = getUsers();
-      if (users[currentUser]) {
-        if (score > (users[currentUser].highScore || 0)) {
-          users[currentUser].highScore = score;
-          saveUsers(users);
-          updateLeaderboard();
-          return true;
-        }
-      }
-      return false;
+      if (!session || score <= myBest) return false;
+      myBest = score;
+      const payload = { name: session.name, highScore: score, uid: session.uid };
+      dbRequest('PUT', `scores/${session.key}`, payload, true)
+        .then(loadLeaderboard)
+        .catch(() => setLeaderboardStatus("Skor kaydedilemedi, bağlantını kontrol et."));
+      return true;
     }
 
-    function updateLeaderboard() {
-      const users = getUsers();
-      const leaderboardList = document.getElementById('leaderboard-list');
-      leaderboardList.innerHTML = '';
+    function setLeaderboardStatus(text) {
+      document.getElementById('leaderboard-status').textContent = text;
+    }
 
-      const sorted = Object.keys(users)
-        .map(u => ({ username: u, highScore: users[u].highScore || 0 }))
-        .sort((a, b) => b.highScore - a.highScore);
+    async function loadLeaderboard() {
+      if (!session) return;
+      try {
+        const data = await dbRequest('GET', 'scores');
+        const list = Object.keys(data || {})
+          .map(k => ({ key: k, name: data[k].name || k, highScore: Number(data[k].highScore) || 0 }))
+          .sort((a, b) => b.highScore - a.highScore)
+          .slice(0, 50);
+        renderLeaderboard(list);
+        setLeaderboardStatus(list.length ? "" : "Henüz kimse oynamadı.");
+      } catch (e) {
+        setLeaderboardStatus("Sıralama yüklenemedi.");
+      }
+    }
 
-      sorted.forEach((item, index) => {
+    function renderLeaderboard(list) {
+      const ul = document.getElementById('leaderboard-list');
+      ul.innerHTML = '';
+      list.forEach((item, index) => {
         const li = document.createElement('li');
-        li.className = 'leaderboard-item' + (item.username === currentUser ? ' me' : '');
+        li.className = 'leaderboard-item' + (session && item.key === session.key ? ' me' : '');
         const name = document.createElement('span');
-        name.textContent = `${index + 1}. ${item.username}`;   // textContent: kullanıcı adı HTML olarak yorumlanmaz
+        name.textContent = `${index + 1}. ${item.name}`;
         const pts = document.createElement('span');
         pts.textContent = `${item.highScore} P`;
         li.appendChild(name);
         li.appendChild(pts);
-        leaderboardList.appendChild(li);
+        ul.appendChild(li);
       });
     }
 
-    // --- ORTA SEVİYE DENGELİ ZORLAŞMA HESAPLAMASI ---
+    function startLeaderboardPolling() {
+      stopLeaderboardPolling();
+      setLeaderboardStatus("Yükleniyor...");
+      loadLeaderboard();
+      leaderboardTimer = setInterval(() => {
+        if (!document.hidden) loadLeaderboard();
+      }, LEADERBOARD_REFRESH_MS);
+    }
+    function stopLeaderboardPolling() {
+      if (leaderboardTimer) clearInterval(leaderboardTimer);
+      leaderboardTimer = null;
+      document.getElementById('leaderboard-list').innerHTML = '';
+      setLeaderboardStatus("");
+    }
+
+    // ---------- Oyun mantığı ----------
     function getLevelConfig(level) {
       const isBonus = (level % 5 === 0);
 
@@ -411,7 +511,6 @@
         const ballObj = { id: num, x, y, vx, vy, element: el, isClicked: false };
         styleBall(ballObj);
 
-        // pointerdown: dokunmatik ekranda 300ms gecikme olmadan anında tepki verir
         el.addEventListener('pointerdown', (e) => {
           e.preventDefault();
           handleBallClick(ballObj);
