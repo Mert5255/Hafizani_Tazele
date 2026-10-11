@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sayı Sıralama Hafıza Oyunu</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: #0f172a; color: #f8fafc;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100vh; min-height: 100dvh;
+      padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
+      user-select: none; -webkit-user-select: none;
+      overscroll-behavior: none;
+    }
+    input { user-select: text; -webkit-user-select: text; }
+
+    header { margin-top: 6px; text-align: center; width: 100%; }
+    h1 { margin: 0 0 4px 0; font-size: clamp(20px, 5.5vw, 26px); color: #38bdf8; }
+    .user-welcome { font-size: 14px; color: #94a3b8; margin-bottom: 8px; }
+    .stats { font-size: clamp(12px, 3.4vw, 15px); margin-bottom: 8px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+    .stat-box { background: #1e293b; padding: 5px 10px; border-radius: 8px; border: 1px solid #334155; white-space: nowrap; }
+
+    .container {
+      display: flex; gap: 16px; align-items: flex-start; justify-content: center;
+      width: 100%; max-width: 900px; margin-top: 4px;
+    }
+
+    #game-area {
+      position: relative; width: 100%; max-width: 600px; aspect-ratio: 4 / 3;
+      background: #1e293b; border: 3px solid #334155; border-radius: 12px; overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      touch-action: manipulation; flex: 1 1 600px;
+    }
+
+    .leaderboard-panel {
+      width: 250px; flex: 0 0 250px; height: 450px; background: #1e293b;
+      border: 3px solid #334155; border-radius: 12px; padding: 15px;
+      display: flex; flex-direction: column;
+    }
+    .leaderboard-title { font-size: 18px; font-weight: bold; color: #facc15; text-align: center; margin-bottom: 10px; }
+    .leaderboard-list { flex: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
+    .leaderboard-item {
+      display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px;
+      border-bottom: 1px solid #334155; font-size: 14px;
+    }
+    .leaderboard-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .leaderboard-item.me { background: rgba(56, 189, 248, 0.2); font-weight: bold; border-radius: 4px; }
+
+    .ball {
+      position: absolute; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #38bdf8, #0284c7);
+      color: #fff; display: flex; justify-content: center; align-items: center;
+      font-weight: bold; cursor: pointer; touch-action: manipulation;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .ball.hidden-text { color: transparent; }
+    .ball.correct { background: radial-gradient(circle at 30% 30%, #4ade80, #16a34a); cursor: default; }
+    .ball.wrong { background: radial-gradient(circle at 30% 30%, #f87171, #dc2626); }
+    .ball.bonus { background: radial-gradient(circle at 30% 30%, #facc15, #ca8a04); }
+    @media (hover: hover) { .ball:hover { filter: brightness(1.12); } }
+
+    /* Overlay (oyun alanı içinde) */
+    #overlay {
+      position: absolute; inset: 0;
+      background: rgba(15, 23, 42, 0.92); display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 10; padding: 16px; text-align: center;
+    }
+    /* Giriş modalı (tüm ekranı kaplar) */
+    #auth-modal {
+      position: fixed; inset: 0;
+      background: rgba(15, 23, 42, 0.97); display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 100; padding: 20px; text-align: center;
+    }
+    #overlay-title { font-size: clamp(24px, 7vw, 32px); font-weight: bold; margin-bottom: 8px; }
+    #overlay-msg { font-size: clamp(14px, 3.8vw, 16px); margin-bottom: 12px; color: #cbd5e1; max-width: 90%; }
+    #score-info { font-size: clamp(15px, 4vw, 18px); font-weight: bold; color: #38bdf8; margin-bottom: 12px; }
+
+    input {
+      width: 100%; max-width: 320px; padding: 12px; margin: 8px 0; border-radius: 6px;
+      border: 1px solid #475569; background: #0f172a; color: #fff;
+      font-size: 16px; /* iOS'ta yakınlaştırmayı önler */
+    }
+    button {
+      padding: 12px 28px; font-size: 16px; font-weight: bold; color: #fff;
+      background: #2563eb; border: none; border-radius: 8px; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4); transition: background 0.2s, transform 0.1s;
+      margin-top: 5px; touch-action: manipulation; min-height: 44px;
+    }
+    button:active { background: #1d4ed8; transform: translateY(1px); }
+    .auth-toggle { font-size: 14px; color: #38bdf8; cursor: pointer; margin-top: 14px; text-decoration: underline; padding: 6px; }
+
+    /* Tablet ve telefon: sıralama tablosu oyunun altına geçer */
+    @media (max-width: 900px) {
+      .container { flex-direction: column; align-items: center; gap: 12px; }
+      #game-area { flex: none; }
+      .leaderboard-panel { width: 100%; max-width: 600px; flex: none; height: 220px; padding: 12px; }
+    }
+    /* Dikey telefon: oyun alanı daha dik olsun */
+    @media (max-width: 600px) and (orientation: portrait) {
+      #game-area { aspect-ratio: 4 / 5; border-width: 2px; }
+    }
+    /* Yatay telefon: alçak ekranda her şey sığsın */
+    @media (max-height: 480px) and (orientation: landscape) {
+      header { margin-top: 0; }
+      h1 { display: none; }
+      .user-welcome, .stats { margin-bottom: 4px; }
+      #game-area { max-width: min(600px, calc((100dvh - 90px) * 4 / 3)); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Giriş / Kayıt Modalı -->
+  <div id="auth-modal">
+    <h2 id="auth-title" style="color: #38bdf8; margin: 0 0 10px;">Giriş Yap</h2>
+    <input type="text" id="auth-username" placeholder="Kullanıcı Adı" autocomplete="username" autocapitalize="none">
+    <input type="password" id="auth-password" placeholder="Şifre" autocomplete="current-password">
+    <div id="auth-error" style="color: #f87171; font-size: 13px; min-height: 18px; margin-top: 4px;"></div>
+    <button id="auth-btn" onclick="handleAuth()">Giriş Yap</button>
+    <div class="auth-toggle" id="auth-toggle-btn" onclick="toggleAuthMode()">Hesabın yok mu? Kayıt Ol</div>
+  </div>
+
+  <header>
+    <h1>Hafıza &amp; Sıralama Oyunu</h1>
+    <div class="user-welcome">Oyuncu: <span id="current-user-name" style="color: #facc15; font-weight: bold;">-</span> | <a href="#" onclick="logout(); return false;" style="color: #f87171;">Çıkış Yap</a></div>
+    <div class="stats">
+      <div class="stat-box">Bölüm: <span id="level-display" style="color: #38bdf8; font-weight: bold;">1</span> / 100</div>
+      <div class="stat-box">Puan: <span id="score-display" style="color: #facc15; font-weight: bold;">0</span></div>
+      <div class="stat-box">Süre: <span id="time-display" style="color: #facc15; font-weight: bold;">3.0</span>s</div>
+      <div class="stat-box">Top: <span id="count-display" style="color: #4ade80; font-weight: bold;">4</span></div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div id="game-area">
+      <div id="overlay" style="display: none;">
+        <div id="overlay-title" style="color: #38bdf8;">BAŞLA</div>
+        <div id="overlay-msg">Hazır olduğunuzda oyuna başlayın.</div>
+        <div id="score-info"></div>
+        <button id="start-btn" onclick="startLevel()">Başla</button>
+      </div>
+    </div>
+
+    <div class="leaderboard-panel">
+      <div class="leaderboard-title">🏆 Sıralama Tablosu</div>
+      <ul class="leaderboard-list" id="leaderboard-list"></ul>
+    </div>
+  </div>
+
+  <script>
+    const gameArea = document.getElementById('game-area');
+    const overlay = document.getElementById('overlay');
+    const overlayTitle = document.getElementById('overlay-title');
+    const overlayMsg = document.getElementById('overlay-msg');
+    const scoreInfo = document.getElementById('score-info');
+    const startBtn = document.getElementById('start-btn');
+
+    const levelDisplay = document.getElementById('level-display');
+    const scoreDisplay = document.getElementById('score-display');
+    const timeDisplay = document.getElementById('time-display');
+    const countDisplay = document.getElementById('count-display');
+
+    let currentUser = null;
+    let isRegisterMode = false;
+
+    let currentLevel = 1;
+    let currentScore = 0;
+    const maxLevel = 100;
+
+    let balls = [];
+    let expectedNumber = 1;
+    let hideTimeout = null;
+    let animationFrameId = null;
+    let isGameActive = false;
+
+    // Ekran boyutuna göre ölçekleme
+    let areaW = 0, areaH = 0, ballSize = 50, speedScale = 1;
+
+    const successMessages = [
+      "Muazzam bir hafıza!", "Harika gidiyorsun!", "Aklına sağlık, çok hızlısın!",
+      "Zihnin adeta bir bilgisayar gibi!", "Durdurulamıyorsun!", "Gözlerin taktiksel çalışıyor!",
+      "Hafızana şapka çıkartılır!", "Gittikçe ustalaşıyorsun!"
+    ];
+
+    function measureArea() {
+      // clientWidth/Height kenarlık hariç iç alanı verir
+      areaW = gameArea.clientWidth;
+      areaH = gameArea.clientHeight;
+      ballSize = Math.round(Math.max(34, Math.min(50, areaW * 0.085)));
+      speedScale = areaW / 600;
+    }
+
+    function styleBall(b) {
+      const el = b.element;
+      el.style.width = ballSize + 'px';
+      el.style.height = ballSize + 'px';
+      el.style.fontSize = Math.round(ballSize * 0.44) + 'px';
+      el.style.left = b.x + 'px';
+      el.style.top = b.y + 'px';
+    }
+
+    // Ekran döndürülünce / boyut değişince topları orantılı olarak yeniden konumlandır
+    function handleResize() {
+      const oldW = areaW, oldH = areaH;
+      measureArea();
+      if (!oldW || !oldH || !balls.length) return;
+      const rx = areaW / oldW, ry = areaH / oldH;
+      balls.forEach(b => {
+        b.x = Math.min(Math.max(0, b.x * rx), areaW - ballSize);
+        b.y = Math.min(Math.max(0, b.y * ry), areaH - ballSize);
+        styleBall(b);
+      });
+    }
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem('memory_game_users') || '{}');
+    }
+    function saveUsers(users) {
+      localStorage.setItem('memory_game_users', JSON.stringify(users));
+    }
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      document.getElementById('auth-title').innerText = isRegisterMode ? "Kayıt Ol" : "Giriş Yap";
+      document.getElementById('auth-btn').innerText = isRegisterMode ? "Kayıt Ol ve Başla" : "Giriş Yap";
+      document.getElementById('auth-toggle-btn').innerText = isRegisterMode ? "Zaten hesabın var mı? Giriş Yap" : "Hesabın yok mu? Kayıt Ol";
+      document.getElementById('auth-error').innerText = "";
+    }
+
+    function handleAuth() {
+      const u = document.getElementById('auth-username').value.trim();
+      const p = document.getElementById('auth-password').value.trim();
+      const errorDiv = document.getElementById('auth-error');
+
+      if (!u || !p) {
+        errorDiv.innerText = "Lütfen kullanıcı adı ve şifre girin.";
+        return;
+      }
+
+      const users = getUsers();
+
+      if (isRegisterMode) {
+        if (users[u]) {
+          errorDiv.innerText = "Bu kullanıcı adı zaten alınmış!";
+          return;
+        }
+        users[u] = { password: p, highScore: 0 };
+        saveUsers(users);
+        currentUser = u;
+        initGameSession();
+      } else {
+        if (!users[u] || users[u].password !== p) {
+          errorDiv.innerText = "Hatalı kullanıcı adı veya şifre!";
+          return;
+        }
+        currentUser = u;
+        initGameSession();
+      }
+    }
+
+    // Enter tuşu ile giriş
+    ['auth-username', 'auth-password'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleAuth();
+      });
+    });
+
+    function logout() {
+      currentUser = null;
+      document.getElementById('auth-modal').style.display = 'flex';
+      overlay.style.display = 'none';
+      clearGameArea();
+    }
+
+    function initGameSession() {
+      document.getElementById('auth-modal').style.display = 'none';
+      document.getElementById('current-user-name').innerText = currentUser;
+      currentLevel = 1;
+      currentScore = 0;
+      scoreDisplay.innerText = currentScore;
+      levelDisplay.innerText = currentLevel;
+      updateLeaderboard();
+      measureArea();
+
+      overlayTitle.innerText = "HOŞ GELDİN!";
+      overlayTitle.style.color = "#38bdf8";
+      overlayMsg.innerText = "Hazır olduğunda oyuna başla!";
+      scoreInfo.innerText = "";
+      startBtn.innerText = "Oyuna Başla";
+      overlay.style.display = 'flex';
+    }
+
+    function updateHighScore(score) {
+      const users = getUsers();
+      if (users[currentUser]) {
+        if (score > (users[currentUser].highScore || 0)) {
+          users[currentUser].highScore = score;
+          saveUsers(users);
+          updateLeaderboard();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function updateLeaderboard() {
+      const users = getUsers();
+      const leaderboardList = document.getElementById('leaderboard-list');
+      leaderboardList.innerHTML = '';
+
+      const sorted = Object.keys(users)
+        .map(u => ({ username: u, highScore: users[u].highScore || 0 }))
+        .sort((a, b) => b.highScore - a.highScore);
+
+      sorted.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.className = 'leaderboard-item' + (item.username === currentUser ? ' me' : '');
+        const name = document.createElement('span');
+        name.textContent = `${index + 1}. ${item.username}`;   // textContent: kullanıcı adı HTML olarak yorumlanmaz
+        const pts = document.createElement('span');
+        pts.textContent = `${item.highScore} P`;
+        li.appendChild(name);
+        li.appendChild(pts);
+        leaderboardList.appendChild(li);
+      });
+    }
+
+    // --- ORTA SEVİYE DENGELİ ZORLAŞMA HESAPLAMASI ---
+    function getLevelConfig(level) {
+      const isBonus = (level % 5 === 0);
+
+      let ballCount = 4 + Math.floor((level - 1) / 2);
+      if (ballCount > 15) ballCount = 15;
+
+      let displayTime = 3.0 - (level - 1) * 0.02;
+      if (displayTime < 0.8) displayTime = 0.8;
+
+      let speed = 0;
+      if (level >= 6) {
+        speed = 0.4 + (level - 6) * 0.04;
+        if (speed > 2.5) speed = 2.5;
+      }
+
+      return { ballCount, displayTime: parseFloat(displayTime.toFixed(2)), speed, isBonus };
+    }
+
+    function calculateLevelScore(level) {
+      let basePoint = 100;
+      if (level > 30) {
+        basePoint = 1000 + (level - 30) * 150;
+      } else {
+        basePoint = 100 + level * 20;
+      }
+      if (level % 5 === 0) basePoint *= 3;
+      return basePoint;
+    }
+
+    function startLevel() {
+      overlay.style.display = 'none';
+      clearGameArea();
+      measureArea();
+
+      const config = getLevelConfig(currentLevel);
+
+      levelDisplay.innerText = currentLevel;
+      timeDisplay.innerText = config.displayTime;
+      countDisplay.innerText = config.ballCount;
+
+      expectedNumber = 1;
+      isGameActive = false;
+      balls = [];
+
+      const size = ballSize;
+      const numbers = Array.from({ length: config.ballCount }, (_, i) => i + 1);
+
+      numbers.forEach(num => {
+        let x, y, overlap;
+        let attempts = 0;
+
+        do {
+          overlap = false;
+          x = Math.random() * (areaW - size);
+          y = Math.random() * (areaH - size);
+
+          for (let b of balls) {
+            const dx = b.x - x;
+            const dy = b.y - y;
+            if (Math.sqrt(dx * dx + dy * dy) < size + 5) {
+              overlap = true;
+              break;
+            }
+          }
+          attempts++;
+        } while (overlap && attempts < 200);
+
+        const angle = Math.random() * Math.PI * 2;
+        const v = config.speed * speedScale;
+        const vx = Math.cos(angle) * v;
+        const vy = Math.sin(angle) * v;
+
+        const el = document.createElement('div');
+        el.className = 'ball' + (config.isBonus ? ' bonus' : '');
+        el.textContent = num;
+
+        const ballObj = { id: num, x, y, vx, vy, element: el, isClicked: false };
+        styleBall(ballObj);
+
+        // pointerdown: dokunmatik ekranda 300ms gecikme olmadan anında tepki verir
+        el.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          handleBallClick(ballObj);
+        });
+        gameArea.appendChild(el);
+        balls.push(ballObj);
+      });
+
+      if (config.speed > 0) moveBalls();
+
+      hideTimeout = setTimeout(() => {
+        balls.forEach(b => { if (!b.isClicked) b.element.classList.add('hidden-text'); });
+        isGameActive = true;
+      }, config.displayTime * 1000);
+    }
+
+    function moveBalls() {
+      balls.forEach(b => {
+        b.x += b.vx;
+        b.y += b.vy;
+
+        if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); }
+        else if (b.x >= areaW - ballSize) { b.x = areaW - ballSize; b.vx = -Math.abs(b.vx); }
+
+        if (b.y <= 0) { b.y = 0; b.vy = Math.abs(b.vy); }
+        else if (b.y >= areaH - ballSize) { b.y = areaH - ballSize; b.vy = -Math.abs(b.vy); }
+
+        b.element.style.left = b.x + 'px';
+        b.element.style.top = b.y + 'px';
+      });
+
+      animationFrameId = requestAnimationFrame(moveBalls);
+    }
+
+    function handleBallClick(ball) {
+      if (!isGameActive || ball.isClicked) return;
+
+      if (ball.id === expectedNumber) {
+        ball.isClicked = true;
+        ball.element.classList.remove('hidden-text');
+        ball.element.classList.add('correct');
+        expectedNumber++;
+
+        if (expectedNumber > balls.length) levelCompleted();
+      } else {
+        ball.element.classList.remove('hidden-text');
+        ball.element.classList.add('wrong');
+        gameOver();
+      }
+    }
+
+    function levelCompleted() {
+      isGameActive = false;
+      cancelAnimationFrame(animationFrameId);
+
+      const earnedScore = calculateLevelScore(currentLevel);
+      currentScore += earnedScore;
+      scoreDisplay.innerText = currentScore;
+
+      const isNewHigh = updateHighScore(currentScore);
+      const randomMsg = successMessages[Math.floor(Math.random() * successMessages.length)];
+
+      if (currentLevel >= maxLevel) {
+        overlayTitle.innerText = "ŞAMPİYON!";
+        overlayTitle.style.color = "#4ade80";
+        overlayMsg.innerText = "100 bölümü başardınız! Deha seviyesindesiniz.";
+        scoreInfo.innerText = `Toplam Puanınız: ${currentScore}`;
+        startBtn.innerText = "Yeniden Başla";
+        currentLevel = 1;
+        currentScore = 0;
+      } else {
+        overlayTitle.innerText = "BRAVO!";
+        overlayTitle.style.color = "#4ade80";
+
+        const bonusText = (currentLevel % 5 === 0) ? " 🎉 BONUS BÖLÜMÜ TAMAMLADINIZ!" : "";
+        overlayMsg.innerText = `${randomMsg}${bonusText}`;
+        scoreInfo.innerText = `Kazanılan: +${earnedScore} Puan | Toplam: ${currentScore}` + (isNewHigh ? " (Yeni Rekor! 🔥)" : "");
+
+        startBtn.innerText = "Sonraki Bölüm";
+        currentLevel++;
+      }
+
+      setTimeout(() => { overlay.style.display = 'flex'; }, 500);
+    }
+
+    function gameOver() {
+      isGameActive = false;
+      cancelAnimationFrame(animationFrameId);
+
+      balls.forEach(b => b.element.classList.remove('hidden-text'));
+
+      const isNewHigh = updateHighScore(currentScore);
+
+      overlayTitle.innerText = "OYUN BİTTİ!";
+      overlayTitle.style.color = "#f87171";
+      overlayMsg.innerText = "Yanlış sıraya tıkladınız.";
+      scoreInfo.innerText = `Kazandığınız Toplam Puan: ${currentScore}` + (isNewHigh ? " (Yeni Rekor! 🔥)" : "");
+      startBtn.innerText = "Baştan Başla";
+
+      currentLevel = 1;
+      currentScore = 0;
+
+      setTimeout(() => { overlay.style.display = 'flex'; }, 800);
+    }
+
+    function clearGameArea() {
+      if (hideTimeout) clearTimeout(hideTimeout);
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      document.querySelectorAll('.ball').forEach(b => b.remove());
+      balls = [];
+    }
+
+    measureArea();
+  </script>
+</body>
+</html>
